@@ -1,0 +1,57 @@
+name: Build Windows Installer
+
+# Runs on every push to main, on pull requests (build-only, no publish),
+# and can also be triggered manually from the Actions tab.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: |
+          npx tsc -p electron/tsconfig.json --noEmit
+          npx tsc -p tsconfig.json --noEmit
+
+      - name: Build Windows installer
+        run: npm run package:win
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WP-AI-Image-Publisher-Windows-Installer
+          path: release/*.exe
+          if-no-files-found: error
+
+      # Only runs when you push a version tag (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
+      # Publishes the .exe to a public Releases page so anyone with the link
+      # can download and double-click to install, no GitHub login required.
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
