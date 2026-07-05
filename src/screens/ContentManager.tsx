@@ -143,6 +143,48 @@ export default function ContentManagerScreen() {
               </select>
             </div>
 
+            {/* Sticky selection bar: visible the instant something is
+                checked, regardless of how far down the list you scroll.
+                With unpaginated lists of 50+ items, a call-to-action only
+                at the bottom of the table was effectively invisible. */}
+            {selectedIds.size > 0 && (
+              <div
+                style={{
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 5,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  background: "var(--accent)",
+                  color: "white",
+                  borderRadius: 8,
+                  padding: "12px 16px",
+                  marginBottom: 14
+                }}
+              >
+                <span style={{ fontSize: 13.5, fontWeight: 500 }}>
+                  {selectedIds.size} item{selectedIds.size === 1 ? "" : "s"} selected
+                </span>
+                <div className="btn-row">
+                  <button
+                    className="btn secondary"
+                    style={{ background: "rgba(255,255,255,0.15)", color: "white", border: "none" }}
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    className="btn"
+                    style={{ background: "white", color: "var(--accent)" }}
+                    onClick={handleCreateImageJobs}
+                  >
+                    Add / Update Images for {selectedIds.size} Page{selectedIds.size === 1 ? "" : "s"} →
+                  </button>
+                </div>
+              </div>
+            )}
+
             {filtered.length === 0 ? (
               <div className="empty-state">
                 {content.length === 0
@@ -166,6 +208,7 @@ export default function ContentManagerScreen() {
                       <th>Status</th>
                       <th>Modified</th>
                       <th>Featured Image</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -183,6 +226,17 @@ export default function ContentManagerScreen() {
                         <td>{item.status}</td>
                         <td>{new Date(item.modifiedAt).toLocaleDateString()}</td>
                         <td>{item.featuredImageId ? "Yes" : "—"}</td>
+                        <td>
+                          <button
+                            className="btn secondary"
+                            style={{ padding: "5px 10px", fontSize: 12 }}
+                            onClick={() =>
+                              navigate(`/image-planner?websiteId=${selectedWebsiteId}&contentIds=${item.id}`)
+                            }
+                          >
+                            Add Images
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -190,7 +244,7 @@ export default function ContentManagerScreen() {
 
                 <div className="btn-row" style={{ marginTop: 16 }}>
                   <button className="btn" onClick={handleCreateImageJobs} disabled={selectedIds.size === 0}>
-                    Create Image Plan for {selectedIds.size || ""} Selected
+                    Add / Update Images for {selectedIds.size || ""} Selected
                   </button>
                 </div>
               </>
