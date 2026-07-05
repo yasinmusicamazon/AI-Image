@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { DashboardSummary } from "../lib/window-api";
+import type { Job } from "../../electron/types";
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [recentJobs, setRecentJobs] = useState<Job[]>([]);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -14,8 +16,9 @@ export default function Dashboard() {
           "The app's backend bridge (window.api) is not available. Try restarting the app."
         );
       }
-      const data = await window.api.dashboard.getSummary();
+      const [data, jobs] = await Promise.all([window.api.dashboard.getSummary(), window.api.jobs.list()]);
       setSummary(data);
+      setRecentJobs(jobs.slice(0, 5));
       setError(null);
     } catch (err) {
       setError((err as Error).message || "Failed to load dashboard data.");
@@ -63,7 +66,7 @@ export default function Dashboard() {
         <button className="btn secondary" onClick={() => navigate("/websites")}>
           Load Content
         </button>
-        <button className="btn secondary" disabled title="Available once Phase 2 (AI Image Planner) ships">
+        <button className="btn secondary" onClick={() => navigate("/content")}>
           Create Image Job
         </button>
       </div>
@@ -74,6 +77,12 @@ export default function Dashboard() {
         <StatCard label="Pending Jobs" value={summary?.pendingJobs ?? "–"} />
         <StatCard label="Completed Jobs" value={summary?.completedJobs ?? "–"} />
         <StatCard label="Failed Jobs" value={summary?.failedJobs ?? "–"} />
+      </div>
+
+      <div className="btn-row" style={{ marginBottom: 20 }}>
+        <button className="btn secondary" onClick={() => navigate("/jobs")}>
+          View Job Queue
+        </button>
       </div>
 
       <div className="panel">
@@ -96,10 +105,33 @@ export default function Dashboard() {
 
       <div className="panel">
         <h2>Latest Activity</h2>
-        <div className="empty-state" style={{ padding: "20px 0" }}>
-          No job activity yet. Once image generation jobs (Phase 2+) run, their progress and
-          history will appear here.
-        </div>
+        {recentJobs.length === 0 ? (
+          <div className="empty-state" style={{ padding: "20px 0" }}>
+            No job activity yet. Select pages in Content Manager and create an image plan to get
+            started.
+          </div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Content</th>
+                <th>Provider</th>
+                <th>Status</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentJobs.map((job) => (
+                <tr key={job.id} style={{ cursor: "pointer" }} onClick={() => navigate("/jobs")}>
+                  <td>{job.contentTitle || `Content #${job.contentId}`}</td>
+                  <td>{job.provider}</td>
+                  <td>{job.status}</td>
+                  <td>{new Date(job.updatedAt).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {summary && summary.totalWebsites === 0 && (

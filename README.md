@@ -124,14 +124,59 @@ npm run package:mac    # produces a macOS .dmg in /release (on a Mac, or with pr
 
 ## Roadmap
 
-| Phase | Scope |
-|---|---|
-| **1 (this build)** | App shell, API Settings, Website Manager, WP connection test, page/post loading |
-| 2 | AI page analysis → structured JSON image plan (per the schema in the original spec) |
-| 3 | Image generation via OpenAI/Gemini, prompt editing, Image Review screen |
-| 4 | Sharp-based resize/compress/convert/rename, watermark detection/flagging, WordPress Media upload |
-| 5 | Insert images into page/post content (Gutenberg block or HTML `<img>` fallback), featured image, backup + rollback |
-| 6 | Bulk job queue with pause/resume/retry, structured logs, dry-run mode, Windows installer polish |
+| Phase | Scope | Status |
+|---|---|---|
+| 1 | App shell, API Settings, Website Manager, WP connection test, page/post loading | Done |
+| 2 | Content Manager (select pages/posts), AI Image Planner → structured JSON image plan | Done |
+| 3 | Image generation via OpenAI/Gemini, prompt editing, Image Review screen | Done |
+| 4 | Sharp-based resize/compress/convert/rename, watermark detection/flagging, WordPress Media upload | Done |
+| 5 | Insert images into page/post content (Gutenberg block or HTML `<img>` fallback), featured image, backup + rollback | Done |
+| 6 | Bulk job queue with pause/resume/retry, structured logs, prompt templates, global settings | Done |
+
+## Honest limitations of this build
+
+A few things are implemented pragmatically rather than perfectly, and you
+should know about them before relying on this in production:
+
+- **Watermark detection is an AI vision check, not pixel-level forensics.**
+  It asks a vision-capable model "does this look watermarked/branded?" —
+  effective for obvious stock-photo marks, logos, and stray text, but not a
+  guarantee against subtle or invisible watermarking (e.g. SynthID). There
+  is no watermark *removal* anywhere in this app, by design.
+- **Image insertion placement is heuristic**, based on matching `<h2>`
+  boundaries and a "FAQ" heading in the raw content — not true layout
+  understanding. If a placement rule can't find a good spot, the app logs
+  that and appends the image to the end rather than silently guessing
+  wrong. "Manual only" placement always skips auto-insertion.
+- **The job queue runs with concurrency 1** (one content item at a time)
+  and keeps per-job planning parameters in memory. If the app restarts
+  while jobs are still pending, those specific pending jobs will need to
+  be re-created from Content Manager — completed/failed job history in the
+  database is unaffected.
+- **AI planning uses a separate text model** (`gpt-4.1-mini` for OpenAI,
+  `gemini-2.5-flash` for Gemini) from whatever image model you've selected
+  in API Settings, since image models generate pixels, not structured
+  JSON reasoning.
+- **Dry-run mode** blocks the final content-insertion write to a live
+  page/post (and says so explicitly in the result message) — it does not
+  block image generation or the WordPress Media Library upload, since
+  uploading a file to the Media Library doesn't touch any published page.
+  Turn it off in Global Settings when you're ready to actually publish.
+- **Auto-approve / auto-upload / auto-insert** are chained in that order
+  during the job queue's generation stage: a clean (non-watermarked) image
+  is auto-processed+uploaded only if both "auto-approve" and "auto-upload
+  after approval" are on, and then auto-inserted only if "auto-insert
+  after upload" is also on. If you leave all three off (the default),
+  nothing happens automatically — you review and click Approve / Insert
+  yourself in Image Review, which is the safer default for a live site.
+- **"Require manual approval before live update"** is currently advisory
+  only — the three auto-* toggles above are what actually control automatic
+  behavior. This setting doesn't add a second independent gate on top of
+  them yet; toggling it alone won't change behavior. Left as a clearly
+  labeled no-op rather than removed, since a future version will use it to
+  add a confirmation dialog even when auto-insert is enabled.
+
+## Original scope notes
 
 ## Adding a new AI provider later
 

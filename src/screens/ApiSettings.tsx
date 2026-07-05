@@ -2,6 +2,30 @@ import { useEffect, useState } from "react";
 import type { ApiSettings } from "../../electron/types";
 import type { ApiKeyStatus } from "../lib/window-api";
 
+// Curated from each provider's official model docs. Verified current as of
+// July 2026 — https://developers.openai.com/api/docs/models/all and
+// https://ai.google.dev/gemini-api/docs/image-generation. Image model
+// lineups change often, so a "Custom" option is always available below in
+// case a newer model ships before this list is updated.
+const OPENAI_IMAGE_MODELS: { value: string; label: string }[] = [
+  { value: "gpt-image-2", label: "GPT Image 2 (recommended — current flagship)" },
+  { value: "gpt-image-1.5", label: "GPT Image 1.5 (deprecated by OpenAI)" },
+  { value: "gpt-image-1", label: "GPT Image 1 (deprecated by OpenAI)" },
+  { value: "gpt-image-1-mini", label: "GPT Image 1 Mini (deprecated by OpenAI)" },
+  { value: "chatgpt-image-latest", label: "ChatGPT Image Latest (deprecated by OpenAI)" },
+  { value: "dall-e-3", label: "DALL·E 3 (deprecated by OpenAI)" },
+  { value: "dall-e-2", label: "DALL·E 2 (deprecated by OpenAI)" }
+];
+
+const GEMINI_IMAGE_MODELS: { value: string; label: string }[] = [
+  { value: "gemini-3.1-flash-image", label: "Nano Banana 2 — Gemini 3.1 Flash Image (recommended default)" },
+  { value: "gemini-3-pro-image", label: "Nano Banana Pro — Gemini 3 Pro Image (premium quality)" },
+  { value: "gemini-3.1-flash-lite-image", label: "Nano Banana 2 Lite — Gemini 3.1 Flash Lite Image (fastest/cheapest)" },
+  { value: "gemini-2.5-flash-image", label: "Nano Banana — Gemini 2.5 Flash Image (legacy)" }
+];
+
+const CUSTOM_VALUE = "__custom__";
+
 export default function ApiSettingsScreen() {
   const [settings, setSettings] = useState<ApiSettings | null>(null);
   const [openaiKeyInput, setOpenaiKeyInput] = useState("");
@@ -132,10 +156,10 @@ export default function ApiSettingsScreen() {
         />
         <div className="form-row">
           <label>Model</label>
-          <input
+          <ModelSelect
+            options={OPENAI_IMAGE_MODELS}
             value={settings.openaiModel}
-            onChange={(e) => setSettings({ ...settings, openaiModel: e.target.value })}
-            placeholder="gpt-image-1"
+            onChange={(v) => setSettings({ ...settings, openaiModel: v })}
           />
         </div>
       </div>
@@ -156,10 +180,10 @@ export default function ApiSettingsScreen() {
         />
         <div className="form-row">
           <label>Model</label>
-          <input
+          <ModelSelect
+            options={GEMINI_IMAGE_MODELS}
             value={settings.geminiModel}
-            onChange={(e) => setSettings({ ...settings, geminiModel: e.target.value })}
-            placeholder="gemini-2.5-flash-image"
+            onChange={(v) => setSettings({ ...settings, geminiModel: v })}
           />
         </div>
       </div>
@@ -215,6 +239,53 @@ export default function ApiSettingsScreen() {
         </p>
       </div>
     </>
+  );
+}
+
+function ModelSelect({
+  options,
+  value,
+  onChange
+}: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const isKnown = options.some((o) => o.value === value);
+  const [customText, setCustomText] = useState(isKnown ? "" : value);
+  const selectValue = isKnown ? value : CUSTOM_VALUE;
+
+  return (
+    <div>
+      <select
+        value={selectValue}
+        onChange={(e) => {
+          if (e.target.value === CUSTOM_VALUE) {
+            onChange(customText);
+          } else {
+            onChange(e.target.value);
+          }
+        }}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+        <option value={CUSTOM_VALUE}>Custom (enter model ID manually)…</option>
+      </select>
+      {selectValue === CUSTOM_VALUE && (
+        <input
+          style={{ marginTop: 8 }}
+          value={customText}
+          placeholder="e.g. a newly released model ID"
+          onChange={(e) => {
+            setCustomText(e.target.value);
+            onChange(e.target.value);
+          }}
+        />
+      )}
+    </div>
   );
 }
 

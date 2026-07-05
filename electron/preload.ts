@@ -18,6 +18,9 @@ const IPC = {
   getApiKeyStatus: "settings:getApiKeyStatus",
   testApiKey: "settings:testApiKey",
 
+  getGlobalSettings: "settings:getGlobal",
+  setGlobalSettings: "settings:setGlobal",
+
   listWebsites: "websites:list",
   addWebsite: "websites:add",
   updateWebsite: "websites:update",
@@ -26,6 +29,34 @@ const IPC = {
   loadWebsiteContent: "websites:loadContent",
 
   listContent: "content:list",
+  getContentDetail: "content:getDetail",
+
+  generateImagePlan: "planner:generate",
+  listGeneratedImages: "images:listForContent",
+
+  generateImage: "images:generate",
+  approveImage: "images:approve",
+  skipImage: "images:skip",
+  regenerateImage: "images:regenerate",
+
+  uploadAndInsertImage: "images:uploadAndInsert",
+  readImageFile: "images:readFile",
+
+  listBackups: "backups:list",
+  rollbackBackup: "backups:rollback",
+
+  enqueueJobs: "jobs:enqueue",
+  listJobs: "jobs:list",
+  retryJob: "jobs:retry",
+  cancelJob: "jobs:cancel",
+  pauseQueue: "jobs:pauseQueue",
+  resumeQueue: "jobs:resumeQueue",
+  jobUpdated: "jobs:updated",
+
+  listTemplates: "templates:list",
+  addTemplate: "templates:add",
+  updateTemplate: "templates:update",
+  deleteTemplate: "templates:delete",
 
   getDashboardSummary: "dashboard:getSummary"
 } as const;
@@ -45,7 +76,9 @@ contextBridge.exposeInMainWorld("api", {
     saveApiKey: (provider: AiProvider, apiKey: string) =>
       ipcRenderer.invoke(IPC.saveApiKey, { provider, apiKey }),
     getApiKeyStatus: () => ipcRenderer.invoke(IPC.getApiKeyStatus),
-    testApiKey: (provider: AiProvider) => ipcRenderer.invoke(IPC.testApiKey, { provider })
+    testApiKey: (provider: AiProvider) => ipcRenderer.invoke(IPC.testApiKey, { provider }),
+    getGlobalSettings: () => ipcRenderer.invoke(IPC.getGlobalSettings),
+    setGlobalSettings: (settings: unknown) => ipcRenderer.invoke(IPC.setGlobalSettings, settings)
   },
   websites: {
     list: () => ipcRenderer.invoke(IPC.listWebsites),
@@ -61,7 +94,57 @@ contextBridge.exposeInMainWorld("api", {
     loadContent: (id: string) => ipcRenderer.invoke(IPC.loadWebsiteContent, { id })
   },
   content: {
-    list: (websiteId: string) => ipcRenderer.invoke(IPC.listContent, { websiteId })
+    list: (websiteId: string) => ipcRenderer.invoke(IPC.listContent, { websiteId }),
+    getDetail: (websiteId: string, contentId: number, contentType: "page" | "post") =>
+      ipcRenderer.invoke(IPC.getContentDetail, { websiteId, contentId, contentType })
+  },
+  planner: {
+    generate: (args: {
+      websiteId: string;
+      contentId: number;
+      contentType: "page" | "post";
+      contentTitle: string;
+      provider: AiProvider;
+      imageCount: number;
+      templateId?: string;
+    }) => ipcRenderer.invoke(IPC.generateImagePlan, args),
+    listImages: (websiteId: string, contentId: number) =>
+      ipcRenderer.invoke(IPC.listGeneratedImages, { websiteId, contentId })
+  },
+  images: {
+    approve: (websiteId: string, imageId: string) =>
+      ipcRenderer.invoke(IPC.approveImage, { websiteId, imageId }),
+    skip: (imageId: string) => ipcRenderer.invoke(IPC.skipImage, { imageId }),
+    regenerate: (imageId: string, provider: AiProvider, newPrompt?: string) =>
+      ipcRenderer.invoke(IPC.regenerateImage, { imageId, provider, newPrompt }),
+    uploadAndInsert: (websiteId: string, imageId: string, contentType: "page" | "post") =>
+      ipcRenderer.invoke(IPC.uploadAndInsertImage, { websiteId, imageId, contentType }),
+    readImageFile: (filePath: string) => ipcRenderer.invoke(IPC.readImageFile, { filePath })
+  },
+  backups: {
+    list: (websiteId: string, contentId: number) =>
+      ipcRenderer.invoke(IPC.listBackups, { websiteId, contentId }),
+    rollback: (websiteId: string, backupId: string, contentType: "page" | "post") =>
+      ipcRenderer.invoke(IPC.rollbackBackup, { websiteId, backupId, contentType })
+  },
+  jobs: {
+    enqueue: (items: unknown[]) => ipcRenderer.invoke(IPC.enqueueJobs, { items }),
+    list: () => ipcRenderer.invoke(IPC.listJobs),
+    retry: (jobId: string) => ipcRenderer.invoke(IPC.retryJob, { jobId }),
+    cancel: (jobId: string) => ipcRenderer.invoke(IPC.cancelJob, { jobId }),
+    pauseQueue: () => ipcRenderer.invoke(IPC.pauseQueue),
+    resumeQueue: () => ipcRenderer.invoke(IPC.resumeQueue),
+    onUpdate: (callback: (job: unknown) => void) => {
+      const listener = (_event: unknown, job: unknown) => callback(job);
+      ipcRenderer.on(IPC.jobUpdated, listener);
+      return () => ipcRenderer.removeListener(IPC.jobUpdated, listener);
+    }
+  },
+  templates: {
+    list: () => ipcRenderer.invoke(IPC.listTemplates),
+    add: (template: unknown) => ipcRenderer.invoke(IPC.addTemplate, template),
+    update: (id: string, patch: unknown) => ipcRenderer.invoke(IPC.updateTemplate, { id, patch }),
+    delete: (id: string) => ipcRenderer.invoke(IPC.deleteTemplate, { id })
   },
   dashboard: {
     getSummary: () => ipcRenderer.invoke(IPC.getDashboardSummary)

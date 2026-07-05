@@ -1,6 +1,14 @@
 import { app, BrowserWindow, shell, Menu, dialog } from "electron";
 import path from "path";
 import { registerIpcHandlers } from "./ipc/handlers";
+import {
+  registerContentAndPlannerHandlers,
+  registerImageHandlers,
+  registerBackupHandlers,
+  registerJobHandlers,
+  registerTemplateHandlers,
+  registerGlobalSettingsHandlers
+} from "./ipc/extra-handlers";
 import { closeDb } from "./db/database";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -113,6 +121,11 @@ app.whenReady().then(() => {
 
   try {
     registerIpcHandlers();
+    registerContentAndPlannerHandlers();
+    registerImageHandlers();
+    registerBackupHandlers();
+    registerTemplateHandlers();
+    registerGlobalSettingsHandlers();
   } catch (error) {
     console.error("Failed to register IPC handlers:", error);
     dialog.showErrorBox(
@@ -122,6 +135,7 @@ app.whenReady().then(() => {
   }
 
   createMainWindow();
+  registerJobHandlers(mainWindow);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

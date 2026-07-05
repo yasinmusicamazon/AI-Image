@@ -65,22 +65,108 @@ CREATE TABLE IF NOT EXISTS api_key_status (
   last_test_message   TEXT
 );
 
--- Job queue table, created now so later phases don't need a migration
--- just to introduce the table shape. Not populated until Phase 6 wiring,
--- but the dashboard can safely COUNT() against it starting Phase 1.
+-- Generated images: one row per planned/generated image for a content item.
+CREATE TABLE IF NOT EXISTS generated_images (
+  id                    TEXT PRIMARY KEY,
+  website_id            TEXT NOT NULL REFERENCES websites(id) ON DELETE CASCADE,
+  content_id            INTEGER NOT NULL,
+  image_type            TEXT NOT NULL, -- featured_image | hero_image | section_image | cta_image | infographic
+  purpose               TEXT NOT NULL DEFAULT '',
+  prompt                TEXT NOT NULL,
+  file_name             TEXT NOT NULL,
+  alt_text              TEXT NOT NULL DEFAULT '',
+  caption               TEXT NOT NULL DEFAULT '',
+  description           TEXT NOT NULL DEFAULT '',
+  placement             TEXT NOT NULL DEFAULT 'manual_only',
+  target_size           TEXT NOT NULL DEFAULT '1200x800',
+  provider              TEXT, -- 'openai' | 'gemini', set once generated
+  status                TEXT NOT NULL DEFAULT 'planned', -- planned|generating|generated|watermark_flagged|approved|skipped|processed|uploaded|inserted|failed
+  local_path            TEXT,
+  processed_path        TEXT,
+  original_file_size    INTEGER,
+  processed_file_size   INTEGER,
+  watermark_flag        INTEGER NOT NULL DEFAULT 0,
+  watermark_reason      TEXT,
+  wp_media_id           INTEGER,
+  wp_media_url          TEXT,
+  error_message         TEXT,
+  created_at            TEXT NOT NULL,
+  updated_at            TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_generated_images_content ON generated_images(website_id, content_id);
+
+-- Backups of original content, taken before any WordPress update, to
+-- support "view before/after" and one-click rollback.
+CREATE TABLE IF NOT EXISTS content_backups (
+  id                      TEXT PRIMARY KEY,
+  website_id              TEXT NOT NULL REFERENCES websites(id) ON DELETE CASCADE,
+  content_id              INTEGER NOT NULL,
+  original_content_raw    TEXT NOT NULL,
+  original_featured_media INTEGER,
+  created_at              TEXT NOT NULL,
+  restored_at             TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_content_backups_content ON content_backups(website_id, content_id);
+
+-- Prompt templates: built-in seeded rows (is_builtin = 1) plus user-created
+-- custom templates.
+CREATE TABLE IF NOT EXISTS prompt_templates (
+  id                   TEXT PRIMARY KEY,
+  name                 TEXT NOT NULL,
+  image_style          TEXT NOT NULL DEFAULT '',
+  things_to_avoid      TEXT NOT NULL DEFAULT '',
+  alt_text_rules       TEXT NOT NULL DEFAULT '',
+  filename_rules       TEXT NOT NULL DEFAULT '',
+  prompt_format        TEXT NOT NULL DEFAULT '',
+  default_image_count  INTEGER NOT NULL DEFAULT 2,
+  is_builtin           INTEGER NOT NULL DEFAULT 0,
+  created_at           TEXT NOT NULL,
+  updated_at           TEXT NOT NULL
+);
+
+-- Global settings: singleton row.
+CREATE TABLE IF NOT EXISTS global_settings (
+  id                          INTEGER PRIMARY KEY CHECK (id = 1),
+  default_images_per_page     INTEGER NOT NULL DEFAULT 2,
+  default_provider             TEXT NOT NULL DEFAULT 'manual',
+  default_image_format        TEXT NOT NULL DEFAULT 'webp',
+  default_compression_quality INTEGER NOT NULL DEFAULT 82,
+  auto_approve_images         INTEGER NOT NULL DEFAULT 0,
+  auto_upload_after_approval  INTEGER NOT NULL DEFAULT 0,
+  auto_insert_after_upload    INTEGER NOT NULL DEFAULT 0,
+  dry_run_mode                INTEGER NOT NULL DEFAULT 1,
+  backup_before_update        INTEGER NOT NULL DEFAULT 1, -- always enforced regardless of this flag
+  watermark_detection_enabled INTEGER NOT NULL DEFAULT 1,
+  manual_approval_required    INTEGER NOT NULL DEFAULT 1,
+  active_template_id          TEXT
+);
+
+INSERT OR IGNORE INTO global_settings (id) VALUES (1);
+
+-- Rework of the jobs table: the Phase 1 version was a placeholder shape
+-- with no rows ever written to it. CREATE TABLE IF NOT EXISTS is safe to
+-- run on every startup; a one-time migration for anyone who already has
+-- the old column shape is handled in code (see database.ts) rather than
+-- here, since dropping the table on every launch would destroy real job
+-- history for everyone after this point.
 CREATE TABLE IF NOT EXISTS jobs (
   id             TEXT PRIMARY KEY,
   website_id     TEXT NOT NULL REFERENCES websites(id) ON DELETE CASCADE,
   content_id     INTEGER NOT NULL,
-  status         TEXT NOT NULL DEFAULT 'pending',
-  stage          TEXT NOT NULL DEFAULT 'pending',
+  content_title  TEXT NOT NULL DEFAULT '',
+  provider       TEXT NOT NULL DEFAULT 'manual',
+  status         TEXT NOT NULL DEFAULT 'pending', -- pending|analyzing|generating|processing|uploading|updating|completed|failed|skipped|canceled
   progress       INTEGER NOT NULL DEFAULT 0,
-  error_reason   TEXT,
+  logs_json      TEXT NOT NULL DEFAULT '[]',
+  error_message  TEXT,
   created_at     TEXT NOT NULL,
   updated_at     TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_website ON jobs(website_id);
 
 INSERT OR IGNORE INTO api_settings (id) VALUES (1);
 INSERT OR IGNORE INTO api_key_status (provider, configured) VALUES ('openai', 0);

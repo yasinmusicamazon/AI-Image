@@ -60,7 +60,8 @@ export type InsertionRule =
   | "after_first_h2"
   | "after_second_h2"
   | "before_faq"
-  | "before_final_cta";
+  | "before_final_cta"
+  | "manual_only";
 
 export interface WordPressConnectionTestResult {
   ok: boolean;
@@ -105,7 +106,135 @@ export interface DashboardSummary {
   geminiStatus: ApiKeyStatus;
 }
 
-// IPC channel names, centralized to avoid typos between main/preload/renderer.
+export type ImageType =
+  | "featured_image"
+  | "hero_image"
+  | "section_image"
+  | "cta_image"
+  | "infographic";
+
+export type ImageStatus =
+  | "planned"
+  | "generating"
+  | "generated"
+  | "watermark_flagged"
+  | "approved"
+  | "skipped"
+  | "processed"
+  | "uploaded"
+  | "inserted"
+  | "failed";
+
+export interface GeneratedImage {
+  id: string;
+  websiteId: string;
+  contentId: number;
+  imageType: ImageType;
+  purpose: string;
+  prompt: string;
+  fileName: string;
+  altText: string;
+  caption: string;
+  description: string;
+  placement: InsertionRule;
+  targetSize: string;
+  provider: AiProvider | null;
+  status: ImageStatus;
+  localPath: string | null;
+  processedPath: string | null;
+  originalFileSize: number | null;
+  processedFileSize: number | null;
+  watermarkFlag: boolean;
+  watermarkReason: string | null;
+  wpMediaId: number | null;
+  wpMediaUrl: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type JobStatus =
+  | "pending"
+  | "analyzing"
+  | "generating"
+  | "processing"
+  | "uploading"
+  | "updating"
+  | "completed"
+  | "failed"
+  | "skipped"
+  | "canceled";
+
+export interface JobLogEntry {
+  timestamp: string;
+  message: string;
+}
+
+export interface Job {
+  id: string;
+  websiteId: string;
+  contentId: number;
+  contentTitle: string;
+  provider: AiProvider | "manual";
+  status: JobStatus;
+  progress: number;
+  logs: JobLogEntry[];
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContentBackup {
+  id: string;
+  websiteId: string;
+  contentId: number;
+  originalContentRaw: string;
+  originalFeaturedMedia: number | null;
+  createdAt: string;
+  restoredAt: string | null;
+}
+
+export interface PromptTemplate {
+  id: string;
+  name: string;
+  imageStyle: string;
+  thingsToAvoid: string;
+  altTextRules: string;
+  filenameRules: string;
+  promptFormat: string;
+  defaultImageCount: number;
+  isBuiltin: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GlobalSettings {
+  defaultImagesPerPage: number;
+  defaultProvider: AiProvider | "manual";
+  defaultImageFormat: "webp" | "jpg" | "png";
+  defaultCompressionQuality: number;
+  autoApproveImages: boolean;
+  autoUploadAfterApproval: boolean;
+  autoInsertAfterUpload: boolean;
+  dryRunMode: boolean;
+  backupBeforeUpdate: boolean;
+  watermarkDetectionEnabled: boolean;
+  manualApprovalRequired: boolean;
+  activeTemplateId: string | null;
+}
+
+export interface WpContentDetail extends WpContentItem {
+  rawContent: string;
+  headings: string[];
+}
+
+export interface MediaUploadResult {
+  id: number;
+  sourceUrl: string;
+}
+// NOTE: preload.ts intentionally duplicates these as inline string literals
+// (see comment there) since sandboxed preload scripts cannot import local
+// files. Keep both lists in sync when adding a channel.
 export const IPC = {
   // API settings / keys
   getApiSettings: "settings:getApi",
@@ -113,6 +242,10 @@ export const IPC = {
   saveApiKey: "settings:saveApiKey",
   getApiKeyStatus: "settings:getApiKeyStatus",
   testApiKey: "settings:testApiKey",
+
+  // Global settings
+  getGlobalSettings: "settings:getGlobal",
+  setGlobalSettings: "settings:setGlobal",
 
   // Websites
   listWebsites: "websites:list",
@@ -124,6 +257,40 @@ export const IPC = {
 
   // Content
   listContent: "content:list",
+  getContentDetail: "content:getDetail",
+
+  // AI Image Planner
+  generateImagePlan: "planner:generate",
+  listGeneratedImages: "images:listForContent",
+
+  // Image generation / review
+  generateImage: "images:generate",
+  approveImage: "images:approve",
+  skipImage: "images:skip",
+  regenerateImage: "images:regenerate",
+
+  // Upload / insert
+  uploadAndInsertImage: "images:uploadAndInsert",
+  readImageFile: "images:readFile",
+
+  // Backup / rollback
+  listBackups: "backups:list",
+  rollbackBackup: "backups:rollback",
+
+  // Job queue
+  enqueueJobs: "jobs:enqueue",
+  listJobs: "jobs:list",
+  retryJob: "jobs:retry",
+  cancelJob: "jobs:cancel",
+  pauseQueue: "jobs:pauseQueue",
+  resumeQueue: "jobs:resumeQueue",
+  jobUpdated: "jobs:updated", // main -> renderer push event
+
+  // Prompt templates
+  listTemplates: "templates:list",
+  addTemplate: "templates:add",
+  updateTemplate: "templates:update",
+  deleteTemplate: "templates:delete",
 
   // Dashboard
   getDashboardSummary: "dashboard:getSummary"
