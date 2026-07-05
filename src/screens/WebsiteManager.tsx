@@ -8,9 +8,23 @@ export default function WebsiteManagerScreen() {
   const [testResults, setTestResults] = useState<Record<string, WordPressConnectionTestResult>>({});
   const [busy, setBusy] = useState<Record<string, "testing" | "loading" | "deleting" | null>>({});
   const [loadMsg, setLoadMsg] = useState<Record<string, string>>({});
+  const [listError, setListError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   async function refresh() {
-    setWebsites(await window.api.websites.list());
+    setListError(null);
+    try {
+      if (!window.api?.websites) {
+        throw new Error(
+          "The app's backend bridge (window.api) is not available. Try restarting the app."
+        );
+      }
+      setWebsites(await window.api.websites.list());
+    } catch (err) {
+      setListError((err as Error).message || "Failed to load websites.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -60,6 +74,17 @@ export default function WebsiteManagerScreen() {
         <p>Connect WordPress sites using Application Passwords, then load their pages/posts.</p>
       </div>
 
+      {listError && (
+        <div className="panel">
+          <div className="inline-msg error">{listError}</div>
+          <div className="btn-row" style={{ marginTop: 12 }}>
+            <button className="btn" onClick={refresh}>
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {showAddForm ? (
         <AddWebsiteForm
           onCancel={() => setShowAddForm(false)}
@@ -76,8 +101,10 @@ export default function WebsiteManagerScreen() {
         </div>
       )}
 
-      {websites.length === 0 ? (
-        <div className="empty-state">No websites added yet.</div>
+      {loading ? (
+        <div className="empty-state">Loading websites…</div>
+      ) : websites.length === 0 ? (
+        !listError && <div className="empty-state">No websites added yet.</div>
       ) : (
         websites.map((site) => (
           <div className="panel" key={site.id}>

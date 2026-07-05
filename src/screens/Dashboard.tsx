@@ -1,28 +1,71 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { DashboardSummary } from "../lib/window-api";
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  async function load() {
+    try {
+      if (!window.api?.dashboard) {
+        throw new Error(
+          "The app's backend bridge (window.api) is not available. Try restarting the app."
+        );
+      }
+      const data = await window.api.dashboard.getSummary();
+      setSummary(data);
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message || "Failed to load dashboard data.");
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      const data = await window.api.dashboard.getSummary();
-      if (!cancelled) setSummary(data);
-    }
     load();
     const interval = setInterval(load, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, []);
+
+  if (error) {
+    return (
+      <>
+        <div className="page-header">
+          <h1>Dashboard</h1>
+        </div>
+        <div className="panel">
+          <div className="inline-msg error">{error}</div>
+          <div className="btn-row" style={{ marginTop: 12 }}>
+            <button className="btn" onClick={load}>
+              Retry
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
       <div className="page-header">
         <h1>Dashboard</h1>
         <p>Overview of connected sites, content, and image job activity.</p>
+      </div>
+
+      <div className="btn-row" style={{ marginBottom: 20 }}>
+        <button className="btn" onClick={() => navigate("/websites")}>
+          + Add Website
+        </button>
+        <button className="btn secondary" onClick={() => navigate("/api-settings")}>
+          API Settings
+        </button>
+        <button className="btn secondary" onClick={() => navigate("/websites")}>
+          Load Content
+        </button>
+        <button className="btn secondary" disabled title="Available once Phase 2 (AI Image Planner) ships">
+          Create Image Job
+        </button>
       </div>
 
       <div className="card-grid">
@@ -48,6 +91,14 @@ export default function Dashboard() {
             result={summary?.geminiStatus.lastTestResult ?? null}
             message={summary?.geminiStatus.lastTestMessage ?? null}
           />
+        </div>
+      </div>
+
+      <div className="panel">
+        <h2>Latest Activity</h2>
+        <div className="empty-state" style={{ padding: "20px 0" }}>
+          No job activity yet. Once image generation jobs (Phase 2+) run, their progress and
+          history will appear here.
         </div>
       </div>
 

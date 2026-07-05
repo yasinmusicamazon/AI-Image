@@ -6,19 +6,35 @@ export default function ApiSettingsScreen() {
   const [settings, setSettings] = useState<ApiSettings | null>(null);
   const [openaiKeyInput, setOpenaiKeyInput] = useState("");
   const [geminiKeyInput, setGeminiKeyInput] = useState("");
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [openaiStatus, setOpenaiStatus] = useState<ApiKeyStatus | null>(null);
   const [geminiStatus, setGeminiStatus] = useState<ApiKeyStatus | null>(null);
   const [testing, setTesting] = useState<"openai" | "gemini" | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   async function refresh() {
-    const [s, status] = await Promise.all([
-      window.api.settings.getApiSettings(),
-      window.api.settings.getApiKeyStatus()
-    ]);
-    setSettings(s);
-    setOpenaiStatus(status.openai);
-    setGeminiStatus(status.gemini);
+    setLoadError(null);
+    try {
+      if (!window.api?.settings) {
+        throw new Error(
+          "The app's backend bridge (window.api) is not available. This usually means the preload script failed to load — try restarting the app, and check Help > Open Logs Folder."
+        );
+      }
+      const [s, status] = await Promise.all([
+        window.api.settings.getApiSettings(),
+        window.api.settings.getApiKeyStatus()
+      ]);
+      setSettings(s);
+      setOpenaiStatus(status.openai);
+      setGeminiStatus(status.gemini);
+    } catch (err) {
+      setLoadError((err as Error).message || "Failed to load API settings.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -28,18 +44,24 @@ export default function ApiSettingsScreen() {
   async function handleSaveKey(provider: "openai" | "gemini") {
     const value = provider === "openai" ? openaiKeyInput : geminiKeyInput;
     if (!value.trim()) return;
-    await window.api.settings.saveApiKey(provider, value.trim());
-    if (provider === "openai") setOpenaiKeyInput("");
-    else setGeminiKeyInput("");
-    setSavedMsg(`${provider === "openai" ? "OpenAI" : "Gemini"} key saved securely.`);
-    setTimeout(() => setSavedMsg(null), 3000);
-    await refresh();
+    try {
+      await window.api.settings.saveApiKey(provider, value.trim());
+      if (provider === "openai") setOpenaiKeyInput("");
+      else setGeminiKeyInput("");
+      setSavedMsg(`${provider === "openai" ? "OpenAI" : "Gemini"} key saved securely.`);
+      setTimeout(() => setSavedMsg(null), 3000);
+      await refresh();
+    } catch (err) {
+      setLoadError(`Failed to save ${provider} key: ${(err as Error).message}`);
+    }
   }
 
   async function handleTestKey(provider: "openai" | "gemini") {
     setTesting(provider);
     try {
       await window.api.settings.testApiKey(provider);
+    } catch (err) {
+      setLoadError(`Failed to test ${provider} key: ${(err as Error).message}`);
     } finally {
       setTesting(null);
       await refresh();
@@ -48,12 +70,38 @@ export default function ApiSettingsScreen() {
 
   async function handleSaveSettings() {
     if (!settings) return;
-    await window.api.settings.setApiSettings(settings);
-    setSavedMsg("Settings saved.");
-    setTimeout(() => setSavedMsg(null), 3000);
+    try {
+      await window.api.settings.setApiSettings(settings);
+      setSavedMsg("Settings saved.");
+      setTimeout(() => setSavedMsg(null), 3000);
+    } catch (err) {
+      setLoadError(`Failed to save settings: ${(err as Error).message}`);
+    }
   }
 
-  if (!settings) return <div className="empty-state">Loading…</div>;
+  if (loading) {
+    return <div className="empty-state">Loading API settings…</div>;
+  }
+
+  if (loadError && !settings) {
+    return (
+      <>
+        <div className="page-header">
+          <h1>API Settings</h1>
+        </div>
+        <div className="panel">
+          <div className="inline-msg error">{loadError}</div>
+          <div className="btn-row" style={{ marginTop: 12 }}>
+            <button className="btn" onClick={refresh}>
+              Retry
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (!settings) return null;
 
   return (
     <>
@@ -61,6 +109,12 @@ export default function ApiSettingsScreen() {
         <h1>API Settings</h1>
         <p>Connect OpenAI and Gemini, choose default models, and tune request behavior.</p>
       </div>
+
+      {loadError && (
+        <div className="inline-msg error" style={{ marginBottom: 16 }}>
+          {loadError}
+        </div>
+      )}
 
       <div className="panel">
         <h2>OpenAI</h2>
@@ -73,6 +127,8 @@ export default function ApiSettingsScreen() {
           onTest={() => handleTestKey("openai")}
           testing={testing === "openai"}
           status={openaiStatus}
+          show={showOpenaiKey}
+          onToggleShow={() => setShowOpenaiKey((v) => !v)}
         />
         <div className="form-row">
           <label>Model</label>
@@ -95,6 +151,8 @@ export default function ApiSettingsScreen() {
           onTest={() => handleTestKey("gemini")}
           testing={testing === "gemini"}
           status={geminiStatus}
+          show={showGeminiKey}
+          onToggleShow={() => setShowGeminiKey((v) => !v)}
         />
         <div className="form-row">
           <label>Model</label>
@@ -168,7 +226,9 @@ function ProviderKeyRow({
   onSave,
   onTest,
   testing,
-  status
+  status,
+  show,
+  onToggleShow
 }: {
   label: string;
   placeholder: string;
@@ -178,18 +238,23 @@ function ProviderKeyRow({
   onTest: () => void;
   testing: boolean;
   status: ApiKeyStatus | null;
+  show: boolean;
+  onToggleShow: () => void;
 }) {
   return (
     <div className="form-row">
       <label>{label}</label>
       <div style={{ display: "flex", gap: 8 }}>
         <input
-          type="password"
+          type={show ? "text" : "password"}
           value={value}
           placeholder={status?.configured ? "•••••••••••••••• (saved)" : placeholder}
           onChange={(e) => onChange(e.target.value)}
           style={{ flex: 1 }}
         />
+        <button type="button" className="btn secondary" onClick={onToggleShow}>
+          {show ? "Hide" : "Show"}
+        </button>
         <button className="btn secondary" onClick={onSave} disabled={!value.trim()}>
           Save
         </button>
