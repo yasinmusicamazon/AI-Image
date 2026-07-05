@@ -1,6 +1,36 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { IPC } from "./types";
-import type { AiProvider, ApiSettings, Website } from "./types";
+
+// IMPORTANT: this file must have ZERO local `import`/`require` statements
+// (only the built-in "electron" module is allowed). Electron's sandboxed
+// preload environment (sandbox: true, set in main.ts) only permits
+// requiring a small allowlist of Electron/Node built-ins — requiring any
+// local relative file (e.g. "./types") throws immediately and silently
+// kills the entire preload script before contextBridge ever runs, which
+// is why window.api would otherwise be undefined in every screen.
+//
+// These channel names are intentionally duplicated from
+// electron/types/index.ts rather than imported — keep them in sync if
+// you add a new IPC channel there.
+const IPC = {
+  getApiSettings: "settings:getApi",
+  setApiSettings: "settings:setApi",
+  saveApiKey: "settings:saveApiKey",
+  getApiKeyStatus: "settings:getApiKeyStatus",
+  testApiKey: "settings:testApiKey",
+
+  listWebsites: "websites:list",
+  addWebsite: "websites:add",
+  updateWebsite: "websites:update",
+  deleteWebsite: "websites:delete",
+  testWebsiteConnection: "websites:testConnection",
+  loadWebsiteContent: "websites:loadContent",
+
+  listContent: "content:list",
+
+  getDashboardSummary: "dashboard:getSummary"
+} as const;
+
+type AiProvider = "openai" | "gemini";
 
 /**
  * Everything the renderer (React) is allowed to do lives here. We never
@@ -11,7 +41,7 @@ import type { AiProvider, ApiSettings, Website } from "./types";
 contextBridge.exposeInMainWorld("api", {
   settings: {
     getApiSettings: () => ipcRenderer.invoke(IPC.getApiSettings),
-    setApiSettings: (settings: ApiSettings) => ipcRenderer.invoke(IPC.setApiSettings, settings),
+    setApiSettings: (settings: unknown) => ipcRenderer.invoke(IPC.setApiSettings, settings),
     saveApiKey: (provider: AiProvider, apiKey: string) =>
       ipcRenderer.invoke(IPC.saveApiKey, { provider, apiKey }),
     getApiKeyStatus: () => ipcRenderer.invoke(IPC.getApiKeyStatus),
@@ -25,8 +55,7 @@ contextBridge.exposeInMainWorld("api", {
       username: string;
       applicationPassword: string;
     }) => ipcRenderer.invoke(IPC.addWebsite, payload),
-    update: (id: string, patch: Partial<Website>) =>
-      ipcRenderer.invoke(IPC.updateWebsite, { id, patch }),
+    update: (id: string, patch: unknown) => ipcRenderer.invoke(IPC.updateWebsite, { id, patch }),
     delete: (id: string) => ipcRenderer.invoke(IPC.deleteWebsite, { id }),
     testConnection: (id: string) => ipcRenderer.invoke(IPC.testWebsiteConnection, { id }),
     loadContent: (id: string) => ipcRenderer.invoke(IPC.loadWebsiteContent, { id })
@@ -38,3 +67,4 @@ contextBridge.exposeInMainWorld("api", {
     getSummary: () => ipcRenderer.invoke(IPC.getDashboardSummary)
   }
 });
+
